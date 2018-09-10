@@ -21,7 +21,7 @@ aoi = ee.Geometry(json.loads(sys.argv[1]))
 out = {}
 
 # polygon area in hectares
-out['area'] = aoi.area().divide(10000).getInfo()
+out['area_hectares'] = aoi.area().divide(10000).getInfo()
 
 # s2_02: Number of people living inside the polygon in 2015
 pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
@@ -102,7 +102,7 @@ fields = ["for-for", "for-gra", "for-agr", "for-wet", "for-art", "for-oth", "for
 # multiply pixel area by the area which experienced each of the lc transition classes --> output: area in ha
 lc_transitions = te_land.select("lc_tr").eq([11,12,13,14,15,16,17,21,22,23,24,25,26,26,31,32,33,34,35,36,37,41,42,43,44,45,46,47,51,52,53,54,55,56,57,
               61,62,63,64,65,66,67,71,72,73,74,75,76,77]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['lc_transition'] = fc_areas_to_pct_dict(lc_transitions, normalize=False)
+out['lc_transition_hectares'] = fc_areas_to_pct_dict(lc_transitions, normalize=False)
 
 # s3_07: percent change in soc stocks between 2001-2015
 soc_pch_img = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_soc_globe_2001-2015_deg").select("soc_pch")
