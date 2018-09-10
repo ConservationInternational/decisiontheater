@@ -10,7 +10,7 @@ import io
 
 import ee
 
-from common import fc_areas_to_pct_dict
+from common import get_fc_properties
 
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
@@ -28,6 +28,6 @@ livImage = liv.filter(ee.Filter.neq('lztype_num', None)).reduceToImage(propertie
 fields = ["Agro-Forestry", "Agro-Pastoral", "Arid", "Crops - Floodzone", "Crops - Irrigated", "Crops - Rainfed", "Fishery", "Forest-Based", "National Park", "Other", "Pastoral", "Urban"]
 # multiply pixel area by the area which experienced each of the five transitions --> output: area in ha
 livelihoodareas = livImage.eq([1,2,3,4,5,6,7,8,9,10,11,12]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum(),30)
-out['livelihoods'] = fc_areas_to_pct_dict(livelihoodareas)
+out['livelihoods'] = get_fc_properties(livelihoodareas, normalize=True, scaling=100)
 
 sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))

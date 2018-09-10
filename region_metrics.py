@@ -10,7 +10,7 @@ import io
 
 import ee
 
-from common import fc_areas_to_pct_dict
+from common import get_fc_properties
 
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
@@ -36,29 +36,29 @@ livImage = liv.filter(ee.Filter.neq('lztype_num', None)).reduceToImage(propertie
 fields = ["Agro-Forestry", "Agro-Pastoral", "Arid", "Crops - Floodzone", "Crops - Irrigated", "Crops - Rainfed", "Fishery", "Forest-Based", "National Park", "Other", "Pastoral", "Urban"]
 # multiply pixel area by the area which experienced each of the five transitions --> output: area in ha
 livelihoodareas = livImage.eq([1,2,3,4,5,6,7,8,9,10,11,12]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum(),30)
-out['livelihoods'] = fc_areas_to_pct_dict(livelihoodareas)
+out['livelihoods'] = get_fc_properties(livelihoodareas, normalize=True, scaling=100)
 
 
 # s3_01: SDG 15.3.1 degradation classes 
 
 te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
 sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['area_sdg'] = fc_areas_to_pct_dict(sdg_areas)
+out['area_sdg'] = get_fc_properties(sdg_areas, normalize=True, scaling=100)
 
 # s3_02: Productivity degradation classes
 te_prod = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lp7cl_globe_2001_2015_modis").remap([-32768,1,2,3,4,5,6,7],[-32768,-1,-1,0,0,0,1,1])
 prod_areas = te_prod.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['area_prod'] = fc_areas_to_pct_dict(prod_areas)
+out['area_prod'] = get_fc_properties(prod_areas, normalize=True, scaling=100)
 
 # s3_03: Land cover degradation classes
 te_land = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lc_traj_globe_2001-2001_to_2015")
 lc_areas = te_land.select("lc_dg").eq([-1,0,1]).rename(["degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['area_lc'] = fc_areas_to_pct_dict(lc_areas)
+out['area_lc'] = get_fc_properties(lc_areas, normalize=True, scaling=100)
 
 # s3_04: soc degradation classes
 te_socc_deg = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_soc_globe_2001-2015_deg").select("soc_deg")
 soc_areas = te_socc_deg.eq([-32768,-1,0,1]).rename(["no data", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['area_soc'] = fc_areas_to_pct_dict(soc_areas)
+out['area_soc'] = get_fc_properties(soc_areas, normalize=True, scaling=100)
 
 
 # s3_05: compute land cover classes for 2001 and 2015, and the transitions which occured
@@ -68,13 +68,13 @@ te_prod = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lp7cl_
 fields = ["nodata", "degraded", "stable", "improved"]
 
 prod_forests = te_prod.updateMask(te_land.eq(11)).eq([-32768,-1,0,1]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['prod_forests'] = fc_areas_to_pct_dict(prod_forests)
+out['prod_forests'] = get_fc_properties(prod_forests, normalize=True, scaling=100)
 
 prod_grasslands = te_prod.updateMask(te_land.eq(22)).eq([-32768,-1,0,1]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['prod_grasslands'] = fc_areas_to_pct_dict(prod_grasslands)
+out['prod_grasslands'] = get_fc_properties(prod_grasslands, normalize=True, scaling=100)
 
 prod_agriculture = te_prod.updateMask(te_land.eq(33)).eq([-32768,-1,0,1]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['prod_agriculture'] = fc_areas_to_pct_dict(prod_forests)
+out['prod_agriculture'] = get_fc_properties(prod_forests, normalize=True, scaling=100)
 
 # s3_06: compute land cover classes for 2001 and 2015, and the transitions which occured
 te_land = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lc_traj_globe_2001-2001_to_2015")
@@ -87,8 +87,8 @@ lc_baseline = te_land.select("lc_bl").eq([1,2,3,4,5,6,7]).rename(fields).multipl
 # multiply pixel area by the area which experienced each of the lc classes --> output: area in ha
 lc_target = te_land.select("lc_tg").eq([1,2,3,4,5,6,7]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 
-out['lc_2001'] = fc_areas_to_pct_dict(lc_baseline)
-out['lc_2015'] = fc_areas_to_pct_dict(lc_target)
+out['lc_2001'] = get_fc_properties(lc_baseline, normalize=True, scaling=100)
+out['lc_2015'] = get_fc_properties(lc_target, normalize=True, scaling=100)
 
 # field names for land cover transitions between 2001-2015
 fields = ["for-for", "for-gra", "for-agr", "for-wet", "for-art", "for-oth", "for-wat",
@@ -102,7 +102,7 @@ fields = ["for-for", "for-gra", "for-agr", "for-wet", "for-art", "for-oth", "for
 # multiply pixel area by the area which experienced each of the lc transition classes --> output: area in ha
 lc_transitions = te_land.select("lc_tr").eq([11,12,13,14,15,16,17,21,22,23,24,25,26,26,31,32,33,34,35,36,37,41,42,43,44,45,46,47,51,52,53,54,55,56,57,
               61,62,63,64,65,66,67,71,72,73,74,75,76,77]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['lc_transition_hectares'] = fc_areas_to_pct_dict(lc_transitions, normalize=False)
+out['lc_transition_hectares'] = get_fc_properties(lc_transitions, normalize=False)
 
 # s3_07: percent change in soc stocks between 2001-2015
 soc_pch_img = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_soc_globe_2001-2015_deg").select("soc_pch")
@@ -121,102 +121,4 @@ soc_chg_an = (soc_an_img.select('y2015').subtract(soc_an_img.select('y2001'))).m
 soc_chg_tons_co2e = soc_chg_an.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=250, maxPixels=1e9)
 out['soc_change_tons_co2e'] = soc_chg_tons_co2e.getInfo()['y2015']
 
-
-
-###############################################################################
-# Carbon emissions calculations
-
-# Minimun tree cover to be considered a forest
-tree_cover = 30
-year_start = 2001
-year_end = 2015
-
-##############################################/
-# DATASETS
-# Import Hansen global forest dataset
-hansen = ee.Image('UMD/hansen/global_forest_change_2016_v1_4')
-
-#Import biomass dataset: WHRC is Megagrams of Aboveground Live Woody Biomass per Hectare (Mg/Ha)
-agb = ee.Image("users/geflanddegradation/toolbox_datasets/forest_agb_30m_woodhole")
-
-# reclass to 1.broadleaf, 2.conifer, 3.mixed, 4.savanna
-f_type = ee.Image("users/geflanddegradation/toolbox_datasets/esa_forest_expanded_2015") \
-    .remap([50, 60, 61, 62, 70, 71, 72, 80, 81, 82, 90, 100, 110], 
-           [ 1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  3,   3,   3])
-
-# IPCC climate zones reclassified as from http:#eusoils.jrc.ec.europa.eu/projects/RenewableEnergy/
-# 0-No data, 1-Warm Temperate Moist, 2-Warm Temperate Dry, 3-Cool Temperate Moist, 4-Cool Temperate Dry, 5-Polar Moist,
-# 6-Polar Dry, 7-Boreal Moist, 8-Boreal Dry, 9-Tropical Montane, 10-Tropical Wet, 11-Tropical Moist, 12-Tropical Dry) to
-# 0: no data, 1:trop/sub moist, 2: trop/sub dry, 3: temperate)
-climate = ee.Image("users/geflanddegradation/toolbox_datasets/ipcc_climate_zones") \
-    .remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-           [0, 1, 2, 3, 3, 3, 3, 3, 3, 1,  1, 1, 2])
-
-# Root to shoot ratio methods
-# calculate average above and below ground biomass
-# BGB (t ha-1) Citation Mokany et al. 2006 = (0.489)*(AGB)^(0.89)
-# Mokany used a linear regression of root biomass to shoot biomass for 
-# forest and woodland and found that BGB(y) is ~ 0.489 of AGB(x).  
-# However, applying a power (0.89) to the shoot data resulted in an improved model 
-# for relating root biomass (y) to shoot biomass (x):
-# y = 0:489 x0:890
-bgb = agb.expression('0.489 * BIO**(0.89)', {'BIO': agb})
-rs_ratio = agb.divide(bgb)
-
-# Calculate Total biomass (t/ha) then convert to carbon equilavent (*0.5) to get Total Carbon (t ha-1) = (AGB+BGB)*0.5
-tbcarbon = agb.expression('(bgb + abg ) * 0.5 ', {'bgb': bgb,'abg': agb})
-
-# convert Total Carbon to Total Carbon dioxide tCO2/ha 
-# One ton of carbon equals 44/12 = 11/3 = 3.67 tons of carbon dioxide
-teco2 = agb.expression('totalcarbon * 3.67 ', {'totalcarbon': tbcarbon})
-
-##############################################/
-# define forest cover at the starting date
-fc_str = ee.Image(1).updateMask(hansen.select('treecover2000').gte(tree_cover)) \
-    .updateMask(hansen.select('lossyear').where(hansen.select('lossyear').eq(0),9999).gte(year_start - 2000 + 1)) \
-    .rename(['fc{}'.format(year_start)])
-
-# using forest cover at the start year, identify losses per year
-fl_stack = ee.Image().select()
-for k in range(year_start - 2000 + 1, year_end - 2000 + 1):
-  fl = fc_str.updateMask(hansen.select('lossyear').eq(k)).rename(['fl{}'.format(k + 2000)])
-  fl_stack = fl_stack.addBands(fl)
-
-# use the losses per year to compute forest extent per year
-fc_stack = fc_str
-for k in range(year_start - 2000 + 1, year_end - 2000 + 1):
-  fc =  fc_stack.select('fc{}'.format(k + 2000 - 1)).updateMask(fl_stack.select('fl{}'.format(k + 2000)).unmask(0).neq(1)).rename(['fc{}'.format(k + 2000)])
-  fc_stack = fc_stack.addBands(fc)
-
-# use annual forest extent to estimate annual forest biomass in tons C/ha
-cb_stack = ee.Image().select()
-for k in range(year_start - 2000, year_end - 2000 + 1):
-  cb =  tbcarbon.updateMask(fc_stack.select('fc{}'.format(k + 2000)).eq(1)).rename(['cb{}'.format(k + 2000)])
-  cb_stack = cb_stack.addBands(cb)
-
-# use annual forest loss to estimate annual emissions from deforestation in tons CO2/ha
-ce_stack = ee.Image().select()
-for k in range(year_start - 2000 + 1, year_end - 2000 + 1):
-  ce =  teco2.updateMask(fl_stack.select('fl{}'.format(k + 2000)).eq(1)).rename(['ce{}'.format(k + 2000)])
-  ce_stack = ce_stack.addBands(ce)
-
-# combine all the datasets into a multilayer stack
-output = fc_stack.addBands(fl_stack).addBands(cb_stack).addBands(ce_stack)
-
-# compute pixel areas in hectareas
-areas =  output.multiply(ee.Image.pixelArea().divide(10000))
-
-# compute statistics for the regions
-# stats = areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30)
-# print stats.getInfo()
-
-# The output table will have the attributes from the input table plus:
-# cb2000-cb2016: annual forest above and below ground biomass in tons C/ha
-# ce2001-ce2016: annual emissions from deforestation in tons CO2/ha
-# fl2001-fl2016: annual forest loss in ha
-# fc2000-fc2016: annual forest cover in ha
-
-# Return all output as json on stdout
-
 sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))
-#sys.stdout.write(json.dumps(d, ensure_ascii=False))
