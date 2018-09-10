@@ -64,22 +64,22 @@ out['livelihoods'] = fc_areas_to_pct_dict(livelihoodareas)
 # s3_01: SDG 15.3.1 degradation classes 
 
 te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
-sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improving"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 out['area_sdg'] = fc_areas_to_pct_dict(sdg_areas)
 
 # s3_02: Productivity degradation classes
 te_prod = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lp7cl_globe_2001_2015_modis").remap([-32768,1,2,3,4,5,6,7],[-32768,-1,-1,0,0,0,1,1])
-prod_areas = te_prod.eq([-32768,-1,0,1]).rename(["nodata", "decline", "stable", "improvement"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+prod_areas = te_prod.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 out['area_prod'] = fc_areas_to_pct_dict(prod_areas)
 
 # s3_03: Land cover degradation classes
 te_land = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lc_traj_globe_2001-2001_to_2015")
-lc_areas = te_land.select("lc_dg").eq([-1,0,1]).rename(["degradation", "stable", "improvement"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+lc_areas = te_land.select("lc_dg").eq([-1,0,1]).rename(["degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 out['area_lc'] = fc_areas_to_pct_dict(lc_areas)
 
 # s3_04: soc degradation classes
 te_socc_deg = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_soc_globe_2001-2015_deg").select("soc_deg")
-soc_areas = te_socc_deg.eq([-32768,-1,0,1]).rename(["no data", "degradation", "stable", "improvement"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+soc_areas = te_socc_deg.eq([-32768,-1,0,1]).rename(["no data", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 out['area_soc'] = fc_areas_to_pct_dict(soc_areas)
 
 
@@ -87,7 +87,7 @@ out['area_soc'] = fc_areas_to_pct_dict(soc_areas)
 te_land = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lc_traj_globe_2001-2001_to_2015").select("lc_tr")
 te_prod = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lp7cl_globe_2001_2015_modis").remap([-32768,1,2,3,4,5,6,7],[-32768,-1,-1,0,0,0,1,1])
 
-fields = ["nodata", "decline", "stable", "improvement"]
+fields = ["nodata", "degraded", "stable", "improved"]
 
 prod_forests = te_prod.updateMask(te_land.eq(11)).eq([-32768,-1,0,1]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 out['prod_forests'] = fc_areas_to_pct_dict(prod_forests)
@@ -144,5 +144,5 @@ soc_chg_tons_co2e = soc_chg_an.reduceRegion(reducer=ee.Reducer.sum(), geometry=a
 out['soc_change_tons_co2e'] = soc_chg_tons_co2e.getInfo()['y2015']
 
 
-sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4))
+sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))
 #sys.stdout.write(json.dumps(d, ensure_ascii=False))
