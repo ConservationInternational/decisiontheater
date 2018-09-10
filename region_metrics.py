@@ -16,6 +16,8 @@ service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
 ee.Initialize(credentials)
 
+
+# TODO: FIX THIS!
 aoi = ee.Geometry(json.loads(sys.argv[1]))
 
 out = {}
@@ -74,7 +76,7 @@ prod_grasslands = te_prod.updateMask(te_land.eq(22)).eq([-32768,-1,0,1]).rename(
 out['prod_grasslands'] = get_fc_properties(prod_grasslands, normalize=True, scaling=100)
 
 prod_agriculture = te_prod.updateMask(te_land.eq(33)).eq([-32768,-1,0,1]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['prod_agriculture'] = get_fc_properties(prod_forests, normalize=True, scaling=100)
+out['prod_agriculture'] = get_fc_properties(prod_agriculture, normalize=True, scaling=100)
 
 # s3_06: compute land cover classes for 2001 and 2015, and the transitions which occured
 te_land = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lc_traj_globe_2001-2001_to_2015")
@@ -116,7 +118,7 @@ out['soc_change_percent'] = soc_pch.getInfo()['soc_pch'] * 100
 soc_an_img = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_soc_globe_2001-2015_annual_soc")
 
 # compute change in SOC between 2001 and 2015 converted to co2 eq
-soc_chg_an = (soc_an_img.select('y2015').subtract(soc_an_img.select('y2001'))).multiply(250*250/10000).multiply(3.67)
+soc_chg_an = (soc_an_img.select('y2015').subtract(soc_an_img.select('y2001'))).multiply(ee.Image.pixelArea()).divide(10000).multiply(3.67)
 # compute statistics for the region
 soc_chg_tons_co2e = soc_chg_an.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=250, maxPixels=1e9)
 out['soc_change_tons_co2e'] = soc_chg_tons_co2e.getInfo()['y2015']
