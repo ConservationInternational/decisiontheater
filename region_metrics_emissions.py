@@ -71,7 +71,7 @@ teco2 = agb.expression('totalcarbon * 3.67 ', {'totalcarbon': tbcarbon})
 # define forest cover at the starting date
 fc_str = ee.Image(1).updateMask(hansen.select('treecover2000').gte(tree_cover)) \
     .updateMask(hansen.select('lossyear').where(hansen.select('lossyear').eq(0),9999).gte(year_start - 2000 + 1)) \
-    .rename(['forest_cover_hectares_{}'.format(year_start)])
+    .rename(['forest_cover_{}'.format(year_start)])
 
 # using forest cover at the start year, identify losses per year
 fl_stack = ee.Image().select()
@@ -82,13 +82,13 @@ for k in range(year_start - 2000 + 1, year_end - 2000 + 1):
 # use the losses per year to compute forest extent per year
 fc_stack = fc_str
 for k in range(year_start - 2000 + 1, year_end - 2000 + 1):
-  fc =  fc_stack.select('forest_cover_hectares_{}'.format(k + 2000 - 1)).updateMask(fl_stack.select('forest_loss_hectares_{}'.format(k + 2000)).unmask(0).neq(1)).rename(['forest_cover_hectares_{}'.format(k + 2000)])
+  fc =  fc_stack.select('forest_cover_{}'.format(k + 2000 - 1)).updateMask(fl_stack.select('forest_loss_hectares_{}'.format(k + 2000)).unmask(0).neq(1)).rename(['forest_cover_{}'.format(k + 2000)])
   fc_stack = fc_stack.addBands(fc)
 
 # use annual forest extent to estimate annual forest biomass in tons C/ha
 cb_stack = ee.Image().select()
 for k in range(year_start - 2000, year_end - 2000 + 1):
-  cb =  tbcarbon.updateMask(fc_stack.select('forest_cover_hectares_{}'.format(k + 2000)).eq(1)).rename(['carbon_biomass_tons_per_ha_{}'.format(k + 2000)])
+  cb =  tbcarbon.updateMask(fc_stack.select('forest_cover_{}'.format(k + 2000)).eq(1)).rename(['carbon_biomass_tons_per_ha_{}'.format(k + 2000)])
   cb_stack = cb_stack.addBands(cb)
 
 # use annual forest loss to estimate annual emissions from deforestation in tons CO2/ha
@@ -109,10 +109,10 @@ emissions = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Red
 out['carbon_emissions_tons_co2e'] = sum(emissions.values())
 
 forest_areas = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30),
-        normalize=False, filter_regex='forest_cover_hectares_[0-9]*')
+        normalize=False, filter_regex='forest_cover_[0-9]*')
 
-out['forest_area_hectares_2001'] = forest_areas['forest_cover_hectares_2001']
-out['forest_area_hectares_2015'] = forest_areas['forest_cover_hectares_2015']
+out['forest_area_hectares_2001'] = forest_areas['forest_cover_2001']
+out['forest_area_hectares_2015'] = forest_areas['forest_cover_2015']
 
 # Return all output as json on stdout
 sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))
