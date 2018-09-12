@@ -10,17 +10,40 @@ import io
 
 import ee
 
-from common import get_fc_properties
+from common import get_fc_properties, get_coords
 
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
 ee.Initialize(credentials)
 
-
-# TODO: FIX THIS!
-aoi = ee.Geometry(json.loads(sys.argv[1]))
+aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 
 out = {}
+
+###############################################################################
+# General statistics on polygon
+
+# polygon area in hectares
+aoi_area = aoi.area().divide(10000).getInfo()
+out['area_hectares'] = aoi_area
+
+# To keep processing times reasonable, use a 300 m scale for calculations if 
+# the area of the polygon is greater than 20,000 ha
+if aoi_area < 20000:
+    scale = 20
+else:
+    scale = 300
+
+# s2_02: Number of people living inside the polygon in 2015
+pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
+population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=1000, maxPixels=1e13).getInfo()['population-count']
+out['population'] = population
+
+# s3_01: SDG 15.3.1 degradation classes 
+
+te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
+sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+out['area_sdg'] = get_fc_properties(sdg_areas, normalize=True, scaling=100)
 
 ###############################################################################
 # Forest gain/loss calculations
@@ -40,33 +63,16 @@ fc_loss = hansen.select('treecover2000').gte(tree_cover) \
 
 # compute pixel areas in hectareas
 areas = fc_loss.multiply(ee.Image.pixelArea().divide(10000))
-forest_loss = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30),
+forest_loss = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=scale),
                                 normalize=False)
 out['forest_loss'] = forest_loss['sum']
-
-###############################################################################
-# Other calculations
-
-# polygon area in hectares
-out['area_hectares'] = aoi.area().divide(10000).getInfo()
-
-# s2_02: Number of people living inside the polygon in 2015
-pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
-population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=1000, maxPixels=1e13).getInfo()['population-count']
-out['population'] = population
-
-# s3_01: SDG 15.3.1 degradation classes 
-
-te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
-sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-out['area_sdg'] = get_fc_properties(sdg_areas, normalize=True, scaling=100)
 
 ###########################################################/
 # Restoration projections
 # 1) Agriculture: Estimate economic benefit of reducing yield gaps in degraded agricultural lands by 50 % and of improving SOC by 6% over 30 years
 # 2) Forest restoration: Estimate the C and $ benefit of bringing forest AGB to maximum in the area (95 percentile) over 30 years
 # 3) Forest re-establishment: Estimate the C and $ benefit of regenerating forests in areas where forest has been lost
-#
+
 out['interventions'] = {'forest restoration': {},
                         'forest re-establishment': {},
                         'agricultural restoration': {}}
@@ -165,19 +171,19 @@ pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
 r01_ag_resto = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7],
                            [     0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(4)).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
 r01_ag_resto_area = r01_ag_resto.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=20, maxPixels=1e13).get("remapped")
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
 out['interventions']['agricultural restoration']['area_hectares'] = r01_ag_resto_area.getInfo()
 
 # for forest re-establishment: shrub, grass, sparce or other land cover in areas of potential forest (regardless of kbas or pas)
 r02_fr_reest = pot_forest.eq(1).And(landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0])).eq(1)
 r02_fr_reest_area = r02_fr_reest.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=20, maxPixels=1e13).get("remapped")
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
 out['interventions']['forest re-establishment']['area_hectares'] = r02_fr_reest_area.getInfo()
 
 # for forest restoration: current degraded forests  (regardless of kbas or pas)
 r03_fr_resto = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7], [0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(1))
 r03_fr_resto_area = r03_fr_resto.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=20, maxPixels=1e13).get("remapped")
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
 out['interventions']['forest restoration']['area_hectares'] = r03_fr_resto_area.getInfo()
 
 ###########################################################/
@@ -186,9 +192,9 @@ out['interventions']['forest restoration']['area_hectares'] = r03_fr_resto_area.
 def f_crop_inc(ygap, ypot, hfra):
     crop_gap = (ypot.multiply(0.75).subtract(ypot.subtract(ygap))).divide(10000).updateMask(r01_ag_resto)
     crop_area = crop_gap.gt(0).multiply(ee.Image.pixelArea()).multiply(hfra.divide(hf_total)) \
-            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=20, maxPixels=1e13).get("b1")
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
     crop_mean = crop_gap.where(crop_gap.lt(0),0) \
-            .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=20, maxPixels=1e13).get("b1")
+            .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
     if crop_mean.getInfo() < 0:
         crop_mean = 0
     return ee.Number(crop_area).multiply(crop_mean)
@@ -219,7 +225,7 @@ perso_inc = total_inc.divide(population)
 #Import SOC (ton/Ha)
 soc = ee.Image("users/geflanddegradation/toolbox_datasets/soc_sgrid_30cm_unccd_20180111")
 soc_ag_rest = ee.Number(soc.updateMask(r01_ag_resto) \
-        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=20, maxPixels=1e13).get("b1"))
+        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1"))
 if soc_ag_rest.getInfo() < 0:
     soc_ag_rest = ee.Number(0)
 
@@ -241,19 +247,19 @@ bgb = agb.expression('0.489 * BIO**(0.89)', {'BIO': agb})
 tco2 = agb.expression('(bgb + abg ) * 0.5 * 3.67 ', {'bgb': bgb,'abg': agb})
 
 # define potential forest C stock (in co2 eq) as the 75th percentile of current forest stands in the area (added buffer in case there is no forest)
-tco2_75pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([75]), geometry=aoi.buffer(10000), scale=30, maxPixels=1e13).get("constant"))
+tco2_75pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([75]), geometry=aoi.buffer(10000), scale=scale, maxPixels=1e13).get("constant"))
 if tco2_75pc.getInfo() < 0:
     tco2_75pc = ee.Number(0)
 
 # define potential forest C stock (in co2 eq) as the 95th percentile of current forest stands in the area (added buffer in case there is no forest)
-tco2_95pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([95]), geometry=aoi.buffer(10000), scale=30, maxPixels=1e13).get("constant"))
+tco2_95pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([95]), geometry=aoi.buffer(10000), scale=scale, maxPixels=1e13).get("constant"))
 if tco2_95pc.getInfo() < 0:
     tco2_95pc = ee.Number(0)
 
 r03_fr_resto_co2_dif = tco2.subtract(ee.Number(tco2_95pc)).multiply(-1)#.updateMask(r03_fr_resto)
 
 r03_fr_resto_co2_dif_mean = ee.Number(r03_fr_resto_co2_dif.where(r03_fr_resto_co2_dif.lt(0), 0)\
-        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=20,  maxPixels=1e13).get("constant"))
+        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale,  maxPixels=1e13).get("constant"))
 if r03_fr_resto_co2_dif_mean.getInfo() < 0:
     r03_fr_resto_co2_dif_mean = ee.Number(0)
 

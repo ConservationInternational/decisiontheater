@@ -10,13 +10,13 @@ import io
 
 import ee
 
-from common import get_fc_properties
+from common import get_fc_properties, get_coords
 
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
 ee.Initialize(credentials)
 
-aoi = ee.Geometry(json.loads(sys.argv[1]))
+aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 
 out = {}
 

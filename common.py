@@ -26,3 +26,12 @@ def get_fc_properties(fc, normalize=False, scaling=None, filter_regex=None):
     if scaling:
         ret = {key: value * scaling for key, value in ret.iteritems()}
     return ret
+
+def get_coords(geojson):
+    """."""
+    if geojson.get('features') is not None:
+        return geojson.get('features')[0].get('geometry').get('coordinates')
+    elif geojson.get('geometry') is not None:
+        return geojson.get('geometry').get('coordinates')
+    else:
+        return geojson.get('coordinates')
