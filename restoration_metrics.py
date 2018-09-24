@@ -297,4 +297,29 @@ out['interventions']['agricultural expansion']['dollars_net_per_psn_per_yr'] = o
 out['interventions']['agricultural expansion']['dollars_cost_total'] = out['interventions']['agricultural intensification']['dollars_cost_total']
 out['interventions']['agricultural expansion']['dollars_benefits_total'] = out['interventions']['agricultural intensification']['dollars_benefits_total']
 
+###########################################################
+# dominant ecosystem service
+dom_service = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_greatesttotalrealisedservice")
+
+# define the names of the fields
+fields = ["none","carbon", "nature-basedtourism", "culture-basedtourism", "water", "hazardmitigation", "commercialtimber", "domestictimber", "commercialfisheries",
+              "artisanalfisheries", "fuelwood", "grazing", "non-woodforestproducts", "wildlifedis-services", "wildlifeservices", "environmentalquality"]
+
+# multiply pixel area by the area which experienced each of the three transitions --> output: area in ha
+dom_serv_area = dom_service.eq([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+
+# table with areas of each of the dominant ecosystem services in the area
+out['ecosystem_service_dominant'] = get_fc_properties(dom_serv_area, normalize=True, scaling=100)
+
+###########################################################
+# Relative realised service index (0-1)
+eco_serv_index = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_total_real_services")
+
+# compute statistics for the region
+eco_s_index_mean = eco_serv_index.reduceRegion(reducer=ee.Reducer.mean(),
+                                                   geometry=aoi, scale=10000, 
+                                                   maxPixels=1e9)
+# mean ecosystem service relative index for the region
+out['ecosystem_service_value'] = eco_s_index_mean.getInfo()['b1']
+
 sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))

@@ -10,8 +10,8 @@ def get_fc_properties(fc, normalize=False, scaling=None, filter_regex=None):
     # Note that there may be multiple features
     ret = {}
     for p in [feature['properties'] for feature in fc.getInfo()['features']]:
-        areas = {}
-        # If there is more than one feature, need to update ret with these values
+        # If there is more than one feature, need to update ret with these 
+        # values
         for key, value in p.iteritems():
             if filter_regex:
                 if not regex.match(key):
@@ -26,6 +26,23 @@ def get_fc_properties(fc, normalize=False, scaling=None, filter_regex=None):
     if scaling:
         ret = {key: value * scaling for key, value in ret.iteritems()}
     return ret
+
+
+def get_fc_properties_text(fc, filter_regex=None):
+    if filter_regex:
+        regex = re.compile(filter_regex)
+    # Note that there may be multiple features
+    ret = []
+    for p in [feature['properties'] for feature in fc.getInfo()['features']]:
+        this_ret = {}
+        for key, value in p.iteritems():
+            if filter_regex:
+                if not regex.match(key):
+                    continue
+            this_ret[key] = value
+        ret.append(this_ret)
+    return ret
+
 
 def get_coords(geojson):
     """."""
