@@ -75,7 +75,8 @@ out['forest_loss'] = forest_loss['sum']
 
 out['interventions'] = {'forest restoration': {},
                         'forest re-establishment': {},
-                        'agricultural restoration': {}}
+                        'agricultural intensification': {},
+                        'agricultural expansion': {}}
 
 # load productivity degradation layer, and focus only on degradation classes: decline and early signs of decline
 lp7cl = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lp7cl_globe_2001_2015_modis")
@@ -172,19 +173,22 @@ r01_ag_resto = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7],
                            [     0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(4)).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
 r01_ag_resto_area = r01_ag_resto.multiply(ee.Image.pixelArea().divide(10000)) \
         .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
-out['interventions']['agricultural restoration']['area_hectares'] = r01_ag_resto_area.getInfo()
+out['interventions']['agricultural intensification']['area_hectares'] = r01_ag_resto_area.getInfo()
+out['interventions']['agricultural intensification']['area_habitat_hectares'] = 0
 
 # for forest re-establishment: shrub, grass, sparce or other land cover in areas of potential forest (regardless of kbas or pas)
 r02_fr_reest = pot_forest.eq(1).And(landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0])).eq(1)
 r02_fr_reest_area = r02_fr_reest.multiply(ee.Image.pixelArea().divide(10000)) \
         .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
 out['interventions']['forest re-establishment']['area_hectares'] = r02_fr_reest_area.getInfo()
+out['interventions']['forest re-establishment']['area_habitat_hectares'] = r02_fr_reest_area.getInfo()
 
 # for forest restoration: current degraded forests  (regardless of kbas or pas)
 r03_fr_resto = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7], [0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(1))
 r03_fr_resto_area = r03_fr_resto.multiply(ee.Image.pixelArea().divide(10000)) \
         .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
 out['interventions']['forest restoration']['area_hectares'] = r03_fr_resto_area.getInfo()
+out['interventions']['forest restoration']['area_habitat_hectares'] = r03_fr_resto_area.getInfo()
 
 ###########################################################/
 # ag restoration calculation
@@ -230,8 +234,10 @@ if soc_ag_rest.getInfo() < 0:
     soc_ag_rest = ee.Number(0)
 
 # rate of soc increase https:#www.dpi.nsw.gov.au/__data/assets/pdf_file/0014/321422/A-farmers-guide-to-increasing-Soil-Organic-Carbon-under-pastures.pdf
-out['interventions']['agricultural restoration']['co2_tons_per_yr'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30).getInfo()
-out['interventions']['agricultural restoration']['dollars_per_psn_per_yr'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30).divide(population).add(perso_inc).getInfo()
+out['interventions']['agricultural intensification']['co2_tons_per_yr'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30).getInfo()
+out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30).divide(population).add(perso_inc).getInfo()
+out['interventions']['agricultural intensification']['dollars_cost_total'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30).divide(population).add(perso_inc).getInfo()
+out['interventions']['agricultural intensification']['dollars_benefits_total'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30).divide(population).add(perso_inc).getInfo()
 
 ###########################################################/
 # forest re-establishment calculation
@@ -268,13 +274,27 @@ if r03_fr_resto_co2_dif_mean.getInfo() < 0:
 # forest re-establishment
 
 out['interventions']['forest re-establishment']['co2_tons_per_yr'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area).divide(30)).getInfo()
-out['interventions']['forest re-establishment']['dollars_per_psn_per_yr'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
+out['interventions']['forest re-establishment']['dollars_net_per_psn_per_yr'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
+out['interventions']['forest re-establishment']['dollars_cost_total'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
+out['interventions']['forest re-establishment']['dollars_benefits_total'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
 
 # forest restoration 
 out['interventions']['forest restoration']['co2_tons_per_yr'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area).divide(30)).getInfo()
-out['interventions']['forest restoration']['dollars_per_psn_per_yr'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area)).multiply(15./30).divide(population).getInfo()
+out['interventions']['forest restoration']['dollars_net_per_psn_per_yr'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area)).multiply(15./30).divide(population).getInfo()
+out['interventions']['forest restoration']['dollars_cost_total'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area)).multiply(15./30).divide(population).getInfo()
+out['interventions']['forest restoration']['dollars_benefits_total'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area)).multiply(15./30).divide(population).getInfo()
 
 # Cost of re-establishment over 30 years 900$/ha for planting 400$/ha natural regeneration over a 30 yr period
 # Cost of forest regeneration in forest areas 1/2 of in ag land 200 $/ha  over a 30 yr period
+
+
+# TODO: Fix this once the agricultureal extensification scenario is coded. For 
+# now temporarily output the same data for ag restoration and extensification
+out['interventions']['agricultural expansion']['area_hectares'] = out['interventions']['agricultural intensification']['area_hectares']
+out['interventions']['agricultural expansion']['area_habitat_hectares'] = out['interventions']['agricultural intensification']['area_habitat_hectares']
+out['interventions']['agricultural expansion']['co2_tons_per_yr'] = out['interventions']['agricultural intensification']['co2_tons_per_yr']
+out['interventions']['agricultural expansion']['dollars_net_per_psn_per_yr'] = out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr']
+out['interventions']['agricultural expansion']['dollars_cost_total'] = out['interventions']['agricultural intensification']['dollars_cost_total']
+out['interventions']['agricultural expansion']['dollars_benefits_total'] = out['interventions']['agricultural intensification']['dollars_benefits_total']
 
 sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))
