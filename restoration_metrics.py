@@ -20,6 +20,8 @@ aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 
 out = {}
 
+co2_dollar_per_ton = 15
+
 ###############################################################################
 # General statistics on polygon
 
@@ -40,9 +42,8 @@ population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=
 out['population'] = population
 
 # s3_01: SDG 15.3.1 degradation classes 
-
 te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
-sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+sdg_areas = te_sdgi.eq([-32768, -1, 0, 1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 out['area_sdg'] = get_fc_properties(sdg_areas, normalize=True, scaling=100)
 
 ###############################################################################
@@ -91,7 +92,7 @@ landc_300 = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lc_t
 landc_020 = ee.Image("users/marianogr80/ESACCI-LC-L4-LC10-Map-20m-P1Y-2016-v10")
 
 # combine both datasets and display
-landc = ee.ImageCollection([landc_300.int8(),landc_020.int8()]).mosaic()
+landc = ee.ImageCollection([landc_300.int8(), landc_020.int8()]).mosaic()
 
 # load yield gaps (source: http:#www.earthstat.org/data-download/)
 yg_barle = ee.Image("users/geflanddegradation/yieldgap_earthstat/barley_yieldgap").unmask(0)
@@ -250,8 +251,8 @@ if soc_ag_rest.getInfo() < 0:
 # rate of soc increase https:#www.dpi.nsw.gov.au/__data/assets/pdf_file/0014/321422/A-farmers-guide-to-increasing-Soil-Organic-Carbon-under-pastures.pdf
 i1_ag_co2 = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30)
 out['interventions']['agricultural intensification']['co2_tons_per_yr'] = i1_ag_co2.getInfo()
-i1_benefits_crop = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30)
-i1_benefits_total = i1_benefits_crop.add(i1_ag_co2.multiply(15))
+i1_benefits_crop = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30)
+i1_benefits_total = i1_benefits_crop.add(i1_ag_co2.multiply(co2_dollar_per_ton))
 i1_cost_total = i1_benefits_crop.divide(1.15)
 out['interventions']['agricultural intensification']['dollars_benefits_total'] = i1_benefits_total.getInfo()
 out['interventions']['agricultural intensification']['dollars_cost_total'] = i1_cost_total.getInfo()
@@ -301,7 +302,7 @@ if soc_ag_exp.getInfo() < 0:
 # mean rate of soc loss from conversion of grassland to ag from trends.earth 
 # 40% over 20 years
 i2_ag_co2 = soc_ag_rest.multiply(r02_ag_expan_area).multiply(-0.4/20) # co2 ag restoration (ton/year)
-i2_co2_value = i2_ag_co2.multiply(15) # co2 ag restoration (usd/year)
+i2_co2_value = i2_ag_co2.multiply(co2_dollar_per_ton) # co2 ag restoration (usd/year)
 
 i2_ag_value = i2_crop_value.add(i2_co2_value)
 i2_ag_cost = i2_crop_value.divide(1.15)
@@ -327,39 +328,42 @@ bgb = agb.expression('0.489 * BIO**(0.89)', {'BIO': agb})
 tco2 = agb.expression('(bgb + abg ) * 0.5 * 3.67 ', {'bgb': bgb,'abg': agb})
 
 # define potential forest C stock (in co2 eq) as the 75th percentile of current forest stands in the area (added buffer in case there is no forest)
-tco2_75pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([75]), geometry=aoi.buffer(10000), scale=scale, maxPixels=1e13).get("constant"))
-if tco2_75pc.getInfo() < 0:
-    tco2_75pc = ee.Number(0)
+tco2_85pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([85]), geometry=aoi.buffer(10000), scale=scale, maxPixels=1e13).get("constant"))
+if tco2_85pc.getInfo() < 0:
+    tco2_85pc = ee.Number(0)
 
-# define potential forest C stock (in co2 eq) as the 95th percentile of current forest stands in the area (added buffer in case there is no forest)
-tco2_95pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([95]), geometry=aoi.buffer(10000), scale=scale, maxPixels=1e13).get("constant"))
-if tco2_95pc.getInfo() < 0:
-    tco2_95pc = ee.Number(0)
-
-r03_fr_resto_co2_dif = tco2.subtract(ee.Number(tco2_95pc)).multiply(-1)#.updateMask(r03_fr_resto)
-
-r03_fr_resto_co2_dif_mean = ee.Number(r03_fr_resto_co2_dif.where(r03_fr_resto_co2_dif.lt(0), 0)\
+r03_fr_resto_co2_dif = tco2.subtract(ee.Number(tco2_85pc)).multiply(-1)
+r03_fr_resto_co2_dif_mean = ee.Number(r03_fr_resto_co2_dif.where(r03_fr_resto_co2_dif.lt(0), 0) \
         .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale,  maxPixels=1e13).get("constant"))
 if r03_fr_resto_co2_dif_mean.getInfo() < 0:
     r03_fr_resto_co2_dif_mean = ee.Number(0)
 
 ##########
-# price of CO2 in USD/ton 15 source: http:#calcarbondash.org/
-# forest re-establishment
+# Forest re-establishment and restororation cost calculations
 #
-#
-#
-
-out['interventions']['forest re-establishment']['co2_tons_per_yr'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area).divide(30)).getInfo()
-out['interventions']['forest re-establishment']['dollars_net_per_psn_per_yr'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
-out['interventions']['forest re-establishment']['dollars_cost_total'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
-out['interventions']['forest re-establishment']['dollars_benefits_total'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
+# Note: price of CO2 in USD/ton 15 source: http:#calcarbondash.org/
+i3_fr_co2 = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area).divide(20)) # co2 forest restoration (ton/year)
+i3_fr_value = i3_fr_co2.multiply(co2_dollar_per_ton) # co2 forest restoration (usd/year)
+i3_fr_cost = ee.Number(r03_fr_resto_area).multiply(100)
+i3_fr_net_benef = (i3_fr_value.subtract(i3_fr_cost)).divide(population)
 
 # forest restoration 
-out['interventions']['forest restoration']['co2_tons_per_yr'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area).divide(30)).getInfo()
-out['interventions']['forest restoration']['dollars_net_per_psn_per_yr'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area)).multiply(15./30).divide(population).getInfo()
-out['interventions']['forest restoration']['dollars_cost_total'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area)).multiply(15./30).divide(population).getInfo()
-out['interventions']['forest restoration']['dollars_benefits_total'] = r03_fr_resto_co2_dif_mean.multiply(ee.Number(r03_fr_resto_area)).multiply(15./30).divide(population).getInfo()
+out['interventions']['forest restoration']['co2_tons_per_yr'] = i3_fr_co2.getInfo()
+out['interventions']['forest restoration']['dollars_net_per_psn_per_yr'] = i3_fr_net_benef.getInfo()
+out['interventions']['forest restoration']['dollars_cost_total'] = i3_fr_cost.getInfo()
+out['interventions']['forest restoration']['dollars_benefits_total'] = i3_fr_value.getInfo()
+
+
+i4_fr_co2 = tco2_85pc.multiply(ee.Number(r02_fr_reest_area).divide(20)) # co2 forest re-establ (ton/year)
+i4_fr_value = i4_fr_co2.multiply(co2_dollar_per_ton) # co2 forest re-establ (usd/year)
+i4_fr_cost = ee.Number(r02_fr_reest_area).multiply(400)
+i4_fr_benef = (i4_fr_value.subtract(i4_fr_cost)).divide(population)
+
+# forest re-establishment
+out['interventions']['forest re-establishment']['co2_tons_per_yr'] = i4_fr_co2.getInfo()
+out['interventions']['forest re-establishment']['dollars_net_per_psn_per_yr'] = i4_fr_benef.getInfo()
+out['interventions']['forest re-establishment']['dollars_cost_total'] = i4_fr_cost.getInfo()
+out['interventions']['forest re-establishment']['dollars_benefits_total'] = i4_fr_value.getInfo()
 
 # Cost of re-establishment over 30 years 900$/ha for planting 400$/ha natural regeneration over a 30 yr period
 # Cost of forest regeneration in forest areas 1/2 of in ag land 200 $/ha  over a 30 yr period
@@ -374,7 +378,8 @@ fields = ["none","carbon", "nature-basedtourism", "culture-basedtourism", "water
               "artisanalfisheries", "fuelwood", "grazing", "non-woodforestproducts", "wildlifedis-services", "wildlifeservices", "environmentalquality"]
 
 # multiply pixel area by the area which experienced each of the three transitions --> output: area in ha
-dom_serv_area = dom_service.eq([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+dom_serv_area = dom_service.eq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]) \
+        .rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 
 # table with areas of each of the dominant ecosystem services in the area
 out['ecosystem_service_dominant'] = get_fc_properties(dom_serv_area, normalize=True, scaling=100)
