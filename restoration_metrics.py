@@ -20,7 +20,7 @@ aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 
 out = {}
 
-co2_dollar_per_ton = 15
+co2_dollar_per_ton = 50
 
 ###############################################################################
 # General statistics on polygon
@@ -200,6 +200,7 @@ r02_fr_reest = pot_forest.eq(1).And(landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1
 r02_fr_reest_area = r02_fr_reest.multiply(ee.Image.pixelArea().divide(10000)) \
         .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
 out['interventions']['forest re-establishment']['area_hectares'] = r02_fr_reest_area.getInfo()
+#TODO: Fix so habitat is negative
 out['interventions']['forest re-establishment']['area_habitat_hectares'] = r02_fr_reest_area.getInfo()
 
 # for forest restoration: current degraded forests  (regardless of kbas or pas)
