@@ -249,7 +249,6 @@ soc_ag_rest = ee.Number(soc.updateMask(r01_ag_resto) \
 if soc_ag_rest.getInfo() < 0:
     soc_ag_rest = ee.Number(0)
 
-
 i1_ag_co2 = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30) # co2 ag restoration (ton/year)
 i1_co2_value = i1_ag_co2.multiply(co2_dollar_per_ton) # co2 ag restoration (usd/year)
 i1_ag_value = i1_crop_value.add(i1_co2_value)
