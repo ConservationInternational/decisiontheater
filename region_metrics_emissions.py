@@ -18,6 +18,9 @@ ee.Initialize(credentials)
 
 aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 
+# polygon area in hectares
+area_hectares = aoi.area().divide(10000).getInfo()
+
 out = {}
 
 ###############################################################################
@@ -101,7 +104,7 @@ for k in range(year_start - 2000 + 1, year_end - 2000 + 1):
 output = fc_stack.addBands(fl_stack).addBands(cb_stack).addBands(ce_stack)
 
 # compute pixel areas in hectareas
-areas =  output.multiply(ee.Image.pixelArea().divide(10000))
+areas = output.multiply(ee.Image.pixelArea().divide(10000))
 
 # Get annual emissions and sum them across all years
 emissions = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30),
@@ -113,6 +116,8 @@ forest_areas = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.
 
 out['forest_area_hectares_2001'] = forest_areas['forest_cover_2001']
 out['forest_area_hectares_2015'] = forest_areas['forest_cover_2015']
+out['forest_area_percent_2001'] = forest_areas['forest_cover_2001'] / area_hectares * 100
+out['forest_area_percents_2015'] = forest_areas['forest_cover_2015'] / area_hectares * 100
 
 # Return all output as json on stdout
 sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))
