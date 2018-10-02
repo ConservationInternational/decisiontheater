@@ -40,7 +40,6 @@ out['livelihoods'] = get_fc_properties(livelihoodareas, normalize=True, scaling=
 
 
 # s3_01: SDG 15.3.1 degradation classes 
-
 te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
 sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
 out['area_sdg'] = get_fc_properties(sdg_areas, normalize=True, scaling=100)
