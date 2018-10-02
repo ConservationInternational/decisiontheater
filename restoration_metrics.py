@@ -122,7 +122,7 @@ hf_wheat = ee.Image("users/geflanddegradation/yieldgap_earthstat/wheat_Harvested
 hf_total = hf_barle.add(hf_groun.add(hf_maize.add(hf_rice0.add(hf_soybe.add(hf_sunfl.add(hf_wheat))))))
 
 # potential vegetation cover from Hengl 2018 https:#dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/QQHCIK
-pot_vegeta = ee.Image("users/geflanddegradation/pnv_biometype_biome00k_c_1km_s00cm_20002017_v01")
+pot_vegeta = ee.Image("users/geflanddegradation/toolbox_datasets/pnv_biometype_biome00k_c_1km_s00cm_20002017_v01")
 # define areas of potential forest vegetation cover
 pot_forest = pot_vegeta.remap([1, 2, 3, 4, 7, 8, 9, 13, 14, 15, 16, 17, 18, 19, 20, 22, 27, 28, 30, 31, 32],
                               [1, 1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0])
@@ -165,16 +165,34 @@ pas_r = pas.reduceToImage(properties=['METADATAID'], reducer=ee.Reducer.first())
 # population from GPW4
 pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
 
-###########################################################/
+#Import SOC (ton/Ha)
+soc = ee.Image("users/geflanddegradation/toolbox_datasets/soc_sgrid_30cm_unccd_20180111")
+
+###############################################################################
 # define areas for each of the 3 potential restoration activities
+###############################################################################
 
 # for agriculture restoration: ag land cover, prod degradation, no kbas, no pas
 r01_ag_resto = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7],
-                           [     0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(4)).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
+                           [     0, 1, 1, 0, 0, 0, 0, 0]) \
+        .eq(1).And(landc.eq(4)).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
 r01_ag_resto_area = r01_ag_resto.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13) \
+        .get("remapped")
 out['interventions']['agricultural intensification']['area_hectares'] = r01_ag_resto_area.getInfo()
 out['interventions']['agricultural intensification']['area_habitat_hectares'] = 0
+
+# agriculture expansion: convert shrub, grass and sparce vegetation areas to 
+# ag, no kbas, no pas
+r02_ag_expan = landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                           [0, 0, 1, 1, 0, 0, 1, 0, 0, 0,  0]) \
+        .eq(1).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
+r02_ag_expan_area = r02_ag_expan.multiply(ee.Image.pixelArea().divide(10000)) \
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, 
+                      maxPixels=1e13) \
+        .get("remapped")
+out['interventions']['agricultural expansion']['area_hectares'] = r02_ag_expan_area.getInfo()
+out['interventions']['agricultural expansion']['area_habitat_hectares'] = 0
 
 # for forest re-establishment: shrub, grass, sparce or other land cover in areas of potential forest (regardless of kbas or pas)
 r02_fr_reest = pot_forest.eq(1).And(landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0])).eq(1)
@@ -190,10 +208,11 @@ r03_fr_resto_area = r03_fr_resto.multiply(ee.Image.pixelArea().divide(10000)) \
 out['interventions']['forest restoration']['area_hectares'] = r03_fr_resto_area.getInfo()
 out['interventions']['forest restoration']['area_habitat_hectares'] = r03_fr_resto_area.getInfo()
 
-###########################################################/
+###############################################################################
 # ag restoration calculation
-###########################################################/
-def f_crop_inc(ygap, ypot, hfra):
+###############################################################################
+
+def f_crop_inc_intensification(ygap, ypot, hfra):
     crop_gap = (ypot.multiply(0.75).subtract(ypot.subtract(ygap))).divide(10000).updateMask(r01_ag_resto)
     crop_area = crop_gap.gt(0).multiply(ee.Image.pixelArea()).multiply(hfra.divide(hf_total)) \
             .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
@@ -204,13 +223,13 @@ def f_crop_inc(ygap, ypot, hfra):
     return ee.Number(crop_area).multiply(crop_mean)
   
 # make function to work with tons, and mulitply by price at the end so I can get tons and money from same function ( remove margin from eq, leave reduction in yield gap)
-barle_ton = f_crop_inc(yg_barle, yp_barle, hf_barle)
-groun_ton = f_crop_inc(yg_groun, yp_groun, hf_groun)
-maize_ton = f_crop_inc(yg_maize, yp_maize, hf_maize)
-rice0_ton = f_crop_inc(yg_rice0, yp_rice0, hf_rice0)
-soybe_ton = f_crop_inc(yg_soybe, yp_soybe, hf_soybe)
-sunfl_ton = f_crop_inc(yg_sunfl, yp_sunfl, hf_sunfl)
-wheat_ton = f_crop_inc(yg_wheat, yp_wheat, hf_wheat)
+barle_ton = f_crop_inc_intensification(yg_barle, yp_barle, hf_barle)
+groun_ton = f_crop_inc_intensification(yg_groun, yp_groun, hf_groun)
+maize_ton = f_crop_inc_intensification(yg_maize, yp_maize, hf_maize)
+rice0_ton = f_crop_inc_intensification(yg_rice0, yp_rice0, hf_rice0)
+soybe_ton = f_crop_inc_intensification(yg_soybe, yp_soybe, hf_soybe)
+sunfl_ton = f_crop_inc_intensification(yg_sunfl, yp_sunfl, hf_sunfl)
+wheat_ton = f_crop_inc_intensification(yg_wheat, yp_wheat, hf_wheat)
 
 # prices from online sources in tons/ha and profit margins of 15% (https:#www.farmafrica.org/downloads/resources/MATFGrantholders-Report.5.pdf) 
 barle_inc = barle_ton.multiply(130) # 130 $/ton 
@@ -221,27 +240,82 @@ soybe_inc = soybe_ton.multiply(300) # 300 $/ton
 sunfl_inc = sunfl_ton.multiply(780) # 780 $/ton
 wheat_inc = wheat_ton.multiply(200) # 200 $/ton
 
-total_inc = barle_inc.add(groun_inc.add(maize_inc.add(rice0_inc.add(soybe_inc.add(sunfl_inc.add(wheat_inc))))))
-total_ton = barle_ton.add(groun_ton.add(maize_ton.add(rice0_ton.add(soybe_ton.add(sunfl_ton.add(wheat_ton))))))
+i1_crop_value = barle_inc.add(groun_inc.add(maize_inc.add(rice0_inc.add(soybe_inc.add(sunfl_inc.add(wheat_inc))))))
 
-perso_inc = total_inc.divide(population)
-
-#Import SOC (ton/Ha)
-soc = ee.Image("users/geflanddegradation/toolbox_datasets/soc_sgrid_30cm_unccd_20180111")
 soc_ag_rest = ee.Number(soc.updateMask(r01_ag_resto) \
         .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1"))
 if soc_ag_rest.getInfo() < 0:
     soc_ag_rest = ee.Number(0)
 
 # rate of soc increase https:#www.dpi.nsw.gov.au/__data/assets/pdf_file/0014/321422/A-farmers-guide-to-increasing-Soil-Organic-Carbon-under-pastures.pdf
-out['interventions']['agricultural intensification']['co2_tons_per_yr'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30).getInfo()
-out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30).divide(population).add(perso_inc).getInfo()
-out['interventions']['agricultural intensification']['dollars_cost_total'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30).divide(population).add(perso_inc).getInfo()
-out['interventions']['agricultural intensification']['dollars_benefits_total'] = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30).divide(population).add(perso_inc).getInfo()
+i1_ag_co2 = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30)
+out['interventions']['agricultural intensification']['co2_tons_per_yr'] = i1_ag_co2.getInfo()
+i1_benefits_crop = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67*15./30)
+i1_benefits_total = i1_benefits_crop.add(i1_ag_co2.multiply(15))
+i1_cost_total = i1_benefits_crop.divide(1.15)
+out['interventions']['agricultural intensification']['dollars_benefits_total'] = i1_benefits_total.getInfo()
+out['interventions']['agricultural intensification']['dollars_cost_total'] = i1_cost_total.getInfo()
+out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr'] = i1_benefits_total.subtract(i1_cost_total).divide(population).getInfo()
 
-###########################################################/
+###############################################################################
+# ag expansion calculation
+###############################################################################
+
+def f_crop_inc_expansion(ypot, hfra):
+    crop_gap = ypot.multiply(0.75).divide(10000).updateMask(r02_ag_expan)
+    crop_area = crop_gap.gt(0).multiply(ee.Image.pixelArea()).multiply(hfra.divide(hf_total)) \
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
+    crop_mean = crop_gap.where(crop_gap.lt(0), 0) \
+            .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
+    if crop_mean.getInfo() < 0:
+        crop_mean = 0
+    return ee.Number(crop_area).multiply(crop_mean)
+
+# make function to work with tons, and mulitply by price at the end so I can 
+# get tons and money from same function ( remove margin from eq, leave 
+# reduction in yield gap)
+barle_ton = f_crop_inc_expansion(yp_barle, hf_barle)
+groun_ton = f_crop_inc_expansion(yp_groun, hf_groun)
+maize_ton = f_crop_inc_expansion(yp_maize, hf_maize)
+rice0_ton = f_crop_inc_expansion(yp_rice0, hf_rice0)
+soybe_ton = f_crop_inc_expansion(yp_soybe, hf_soybe)
+sunfl_ton = f_crop_inc_expansion(yp_sunfl, hf_sunfl)
+wheat_ton = f_crop_inc_expansion(yp_wheat, hf_wheat)
+
+# prices from online sources in tons/ha and profit margins of 15% (https:#www.farmafrica.org/downloads/resources/MATFGrantholders-Report.5.pdf) 
+barle_inc = barle_ton.multiply(130) # 130 $/ton 
+groun_inc = groun_ton.multiply(1200)# 1200 $/ton
+maize_inc = maize_ton.multiply(180) # 180 $/ton
+rice0_inc = rice0_ton.multiply(380) # 380 $/ton
+soybe_inc = soybe_ton.multiply(300) # 300 $/ton
+sunfl_inc = sunfl_ton.multiply(780) # 780 $/ton
+wheat_inc = wheat_ton.multiply(200) # 200 $/ton
+
+i2_crop_value = barle_inc.add(groun_inc.add(maize_inc.add(rice0_inc.add(soybe_inc.add(sunfl_inc.add(wheat_inc))))))
+
+soc_ag_exp = ee.Number(soc.updateMask(r02_ag_expan) \
+        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1"))
+if soc_ag_exp.getInfo() < 0:
+    soc_ag_exp = ee.Number(0)
+
+# mean rate of soc loss from conversion of grassland to ag from trends.earth 
+# 40% over 20 years
+i2_ag_co2 = soc_ag_rest.multiply(r02_ag_expan_area).multiply(-0.4/20) # co2 ag restoration (ton/year)
+i2_co2_value = i2_ag_co2.multiply(15) # co2 ag restoration (usd/year)
+
+i2_ag_value = i2_crop_value.add(i2_co2_value)
+i2_ag_cost = i2_crop_value.divide(1.15)
+
+out['interventions']['agricultural expansion']['area_hectares'] = r02_ag_expan_area.getInfo()
+out['interventions']['agricultural expansion']['area_habitat_hectares'] = 0
+out['interventions']['agricultural expansion']['co2_tons_per_yr'] = i2_ag_co2 .getInfo()
+out['interventions']['agricultural expansion']['dollars_net_per_psn_per_yr'] = i2_ag_value.subtract(i2_ag_cost).divide(population).getInfo()
+out['interventions']['agricultural expansion']['dollars_cost_total'] = i2_ag_cost.getInfo()
+out['interventions']['agricultural expansion']['dollars_benefits_total'] = i2_ag_value.getInfo()
+
+###############################################################################
 # forest re-establishment calculation
-###########################################################/
+###############################################################################
 
 #Import biomass dataset: WHRC is Megagrams of Aboveground Live Woody Biomass per Hectare (ton/Ha)
 agb = ee.Image("users/geflanddegradation/toolbox_datasets/forest_agb_30m_woodhole")
@@ -272,6 +346,9 @@ if r03_fr_resto_co2_dif_mean.getInfo() < 0:
 ##########
 # price of CO2 in USD/ton 15 source: http:#calcarbondash.org/
 # forest re-establishment
+#
+#
+#
 
 out['interventions']['forest re-establishment']['co2_tons_per_yr'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area).divide(30)).getInfo()
 out['interventions']['forest re-establishment']['dollars_net_per_psn_per_yr'] = tco2_75pc.multiply(ee.Number(r02_fr_reest_area)).multiply(15./30).divide(population).getInfo()
@@ -287,18 +364,9 @@ out['interventions']['forest restoration']['dollars_benefits_total'] = r03_fr_re
 # Cost of re-establishment over 30 years 900$/ha for planting 400$/ha natural regeneration over a 30 yr period
 # Cost of forest regeneration in forest areas 1/2 of in ag land 200 $/ha  over a 30 yr period
 
-
-# TODO: Fix this once the agricultureal extensification scenario is coded. For 
-# now temporarily output the same data for ag restoration and extensification
-out['interventions']['agricultural expansion']['area_hectares'] = out['interventions']['agricultural intensification']['area_hectares']
-out['interventions']['agricultural expansion']['area_habitat_hectares'] = out['interventions']['agricultural intensification']['area_habitat_hectares']
-out['interventions']['agricultural expansion']['co2_tons_per_yr'] = out['interventions']['agricultural intensification']['co2_tons_per_yr']
-out['interventions']['agricultural expansion']['dollars_net_per_psn_per_yr'] = out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr']
-out['interventions']['agricultural expansion']['dollars_cost_total'] = out['interventions']['agricultural intensification']['dollars_cost_total']
-out['interventions']['agricultural expansion']['dollars_benefits_total'] = out['interventions']['agricultural intensification']['dollars_benefits_total']
-
-###########################################################
+###############################################################################
 # dominant ecosystem service
+###############################################################################
 dom_service = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_greatesttotalrealisedservice")
 
 # define the names of the fields
@@ -311,8 +379,9 @@ dom_serv_area = dom_service.eq([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]).rename(f
 # table with areas of each of the dominant ecosystem services in the area
 out['ecosystem_service_dominant'] = get_fc_properties(dom_serv_area, normalize=True, scaling=100)
 
-###########################################################
+###############################################################################
 # Relative realised service index (0-1)
+###############################################################################
 eco_serv_index = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_total_real_services")
 
 # compute statistics for the region
