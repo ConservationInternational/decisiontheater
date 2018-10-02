@@ -248,15 +248,18 @@ soc_ag_rest = ee.Number(soc.updateMask(r01_ag_resto) \
 if soc_ag_rest.getInfo() < 0:
     soc_ag_rest = ee.Number(0)
 
+
+i1_ag_co2 = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30) # co2 ag restoration (ton/year)
+i1_co2_value = i1_ag_co2.multiply(co2_dollar_per_ton) # co2 ag restoration (usd/year)
+i1_ag_value = i1_crop_value.add(i1_co2_value)
+i1_ag_cost = i1_crop_value.divide(1.15)
+i1_ag_benef = (i1_ag_value.subtract(i1_ag_cost)).divide(population)
+
 # rate of soc increase https:#www.dpi.nsw.gov.au/__data/assets/pdf_file/0014/321422/A-farmers-guide-to-increasing-Soil-Organic-Carbon-under-pastures.pdf
-i1_ag_co2 = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30)
 out['interventions']['agricultural intensification']['co2_tons_per_yr'] = i1_ag_co2.getInfo()
-i1_benefits_crop = soc_ag_rest.multiply(r01_ag_resto_area).multiply(0.06*3.67/30)
-i1_benefits_total = i1_benefits_crop.add(i1_ag_co2.multiply(co2_dollar_per_ton))
-i1_cost_total = i1_benefits_crop.divide(1.15)
-out['interventions']['agricultural intensification']['dollars_benefits_total'] = i1_benefits_total.getInfo()
-out['interventions']['agricultural intensification']['dollars_cost_total'] = i1_cost_total.getInfo()
-out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr'] = i1_benefits_total.subtract(i1_cost_total).divide(population).getInfo()
+out['interventions']['agricultural intensification']['dollars_benefits_total'] = i1_ag_value.getInfo()
+out['interventions']['agricultural intensification']['dollars_cost_total'] = i1_ag_cost.getInfo()
+out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr'] = i1_ag_benef.getInfo()
 
 ###############################################################################
 # ag expansion calculation
@@ -390,9 +393,7 @@ out['ecosystem_service_dominant'] = get_fc_properties(dom_serv_area, normalize=T
 eco_serv_index = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_total_real_services")
 
 # compute statistics for the region
-eco_s_index_mean = eco_serv_index.reduceRegion(reducer=ee.Reducer.mean(),
-                                                   geometry=aoi, scale=10000, 
-                                                   maxPixels=1e9)
+eco_s_index_mean = eco_serv_index.reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=10000, maxPixels=1e9)
 # mean ecosystem service relative index for the region
 out['ecosystem_service_value'] = eco_s_index_mean.getInfo()['b1']
 
