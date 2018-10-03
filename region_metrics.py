@@ -39,15 +39,19 @@ livelihoodareas = livImage.eq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) \
         .rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum(), 30)
 out['livelihoods'] = get_fc_properties(livelihoodareas, normalize=True, scaling=100)
 # Handle the case of polygons outside of the area of coverage of the livelihood 
-# zones data: if more than 10% of the area is no data, then return a zero. 
-# Otherwise, if there is less than 10% nodata, ignore the nodata and normalize 
-# the other categories to sum to 100.
+# zones data
 if out['livelihoods']['No Data'] < 10:
+    # If there is less than 10 percent no data, then ignore the no data by 
+    # eliminating that category, and normalizing all the remaining categories 
+    # to sum to 100
     out['livelihoods'].pop('No Data')
     denominator = sum(out['livelihoods'].values())
     out['livelihoods'] = {key: value / denominator * 100 for key, value in out['livelihoods'].iteritems()}
 else:
-    out['livelihoods'] = 0
+    # if more than 10% of the area is no data, then return zero for all 
+    # categories
+    out['livelihoods'].pop('No Data')
+    out['livelihoods'] = {key: 0. for key, value in out['livelihoods'].iteritems()}
 
 
 # s3_01: SDG 15.3.1 degradation classes 
