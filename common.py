@@ -22,6 +22,11 @@ def get_fc_properties(fc, normalize=False, scaling=None, filter_regex=None):
                 ret[key] = value
     if normalize:
         denominator = sum(ret.values())
+        if denominator == 0:
+            # Handle case of all values being zero - in this case can't 
+            # normalize by a denomninator of zero, so leave things alone - set 
+            # denominator to 1
+            denominator = 1
         ret = {key: value / denominator for key, value in ret.iteritems()}
     if scaling:
         ret = {key: value * scaling for key, value in ret.iteritems()}

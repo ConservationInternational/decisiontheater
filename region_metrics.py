@@ -31,13 +31,23 @@ out['population'] = population.getInfo()['population-count']
 # s2_03: Main livelihoods
 liv = ee.FeatureCollection("users/geflanddegradation/toolbox_datasets/livelihoodzones")
 
-livImage = liv.filter(ee.Filter.neq('lztype_num', None)).reduceToImage(properties=['lztype_num'], reducer=ee.Reducer.first())
+livImage = liv.filter(ee.Filter.neq('lztype_num', None)).reduceToImage(properties=['lztype_num'], reducer=ee.Reducer.first()).unmask(0)
 
 fields = ["No Data", "Agro-Forestry", "Agro-Pastoral", "Arid", "Crops - Floodzone", "Crops - Irrigated", "Crops - Rainfed", "Fishery", "Forest-Based", "National Park", "Other", "Pastoral", "Urban"]
 # multiply pixel area by the area which experienced each of the five transitions --> output: area in ha
 livelihoodareas = livImage.eq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) \
         .rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum(), 30)
 out['livelihoods'] = get_fc_properties(livelihoodareas, normalize=True, scaling=100)
+# Handle the case of polygons outside of the area of coverage of the livelihood 
+# zones data: if more than 10% of the area is no data, then return a zero. 
+# Otherwise, if there is less than 10% nodata, ignore the nodata and normalize 
+# the other categories to sum to 100.
+if out['livelihoods']['No Data'] < 10:
+    out['livelihoods'].pop('No Data')
+    denominator = sum(out['livelihoods'].values())
+    out['livelihoods'] = {key: value / denominator * 100 for key, value in out['livelihoods'].iteritems()}
+else:
+    out['livelihoods'] = 0
 
 
 # s3_01: SDG 15.3.1 degradation classes 
