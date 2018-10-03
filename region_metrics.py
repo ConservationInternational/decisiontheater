@@ -33,7 +33,7 @@ liv = ee.FeatureCollection("users/geflanddegradation/toolbox_datasets/livelihood
 
 livImage = liv.filter(ee.Filter.neq('lztype_num', None)).reduceToImage(properties=['lztype_num'], reducer=ee.Reducer.first())
 
-fields = ["Agro-Forestry", "Agro-Pastoral", "Arid", "Crops - Floodzone", "Crops - Irrigated", "Crops - Rainfed", "Fishery", "Forest-Based", "National Park", "Other", "Pastoral", "Urban"]
+fields = ["No Data", "Agro-Forestry", "Agro-Pastoral", "Arid", "Crops - Floodzone", "Crops - Irrigated", "Crops - Rainfed", "Fishery", "Forest-Based", "National Park", "Other", "Pastoral", "Urban"]
 # multiply pixel area by the area which experienced each of the five transitions --> output: area in ha
 livelihoodareas = livImage.eq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) \
         .rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum(), 30)
