@@ -31,19 +31,25 @@ out['area_hectares'] = aoi_area
 
 # To keep processing times reasonable, use a 300 m scale for calculations if 
 # the area of the polygon is greater than 20,000 ha
-if aoi_area < 20000:
+if aoi_area < 5000:
     scale = 20
 else:
     scale = 300
+MAX_PIXELS= 1e9
 
 # s2_02: Number of people living inside the polygon in 2015
 pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
-population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=1000, maxPixels=1e13).getInfo()['population-count']
+population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, 
+                                  scale=1000, maxPixels=MAX_PIXELS, 
+                                  bestEffort=True).getInfo()['population-count']
 out['population'] = population
 
 # s3_01: SDG 15.3.1 degradation classes 
 te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
-sdg_areas = te_sdgi.eq([-32768, -1, 0, 1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+sdg_areas = te_sdgi.eq([-32768, -1, 0, 1]) \
+        .rename(["nodata", "degraded", "stable", "improved"]) \
+        .multiply(ee.Image.pixelArea().divide(10000)) \
+        .reduceRegions(aoi, ee.Reducer.sum(), scale=scale)
 out['area_sdg'] = get_fc_properties(sdg_areas, normalize=True, scaling=100)
 
 ###############################################################################
@@ -178,7 +184,8 @@ r01_ag_resto = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7],
                            [     0, 1, 1, 0, 0, 0, 0, 0]) \
         .eq(1).And(landc.eq(4)).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
 r01_ag_resto_area = r01_ag_resto.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13) \
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, 
+                      maxPixels=MAX_PIXELS, bestEffort=True) \
         .get("remapped")
 out['interventions']['agricultural intensification']['area_hectares'] = r01_ag_resto_area.getInfo()
 out['interventions']['agricultural intensification']['area_habitat_hectares'] = 0
@@ -189,8 +196,8 @@ r02_ag_expan = landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                            [0, 0, 1, 1, 0, 0, 1, 0, 0, 0,  0]) \
         .eq(1).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
 r02_ag_expan_area = r02_ag_expan.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, 
-                      maxPixels=1e13) \
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale,
+                      maxPixels=MAX_PIXELS, bestEffort=True) \
         .get("remapped")
 out['interventions']['agricultural expansion']['area_hectares'] = r02_ag_expan_area.getInfo()
 out['interventions']['agricultural expansion']['area_habitat_hectares'] = 0
@@ -198,7 +205,7 @@ out['interventions']['agricultural expansion']['area_habitat_hectares'] = 0
 # for forest re-establishment: shrub, grass, sparce or other land cover in areas of potential forest (regardless of kbas or pas)
 r02_fr_reest = pot_forest.eq(1).And(landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0])).eq(1)
 r02_fr_reest_area = r02_fr_reest.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("remapped")
 out['interventions']['forest re-establishment']['area_hectares'] = r02_fr_reest_area.getInfo()
 #TODO: Fix so habitat is negative
 out['interventions']['forest re-establishment']['area_habitat_hectares'] = r02_fr_reest_area.getInfo()
@@ -206,7 +213,7 @@ out['interventions']['forest re-establishment']['area_habitat_hectares'] = r02_f
 # for forest restoration: current degraded forests  (regardless of kbas or pas)
 r03_fr_resto = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7], [0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(1))
 r03_fr_resto_area = r03_fr_resto.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("remapped")
+        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("remapped")
 out['interventions']['forest restoration']['area_hectares'] = r03_fr_resto_area.getInfo()
 out['interventions']['forest restoration']['area_habitat_hectares'] = r03_fr_resto_area.getInfo()
 
@@ -217,9 +224,9 @@ out['interventions']['forest restoration']['area_habitat_hectares'] = r03_fr_res
 def f_crop_inc_intensification(ygap, ypot, hfra):
     crop_gap = (ypot.multiply(0.75).subtract(ypot.subtract(ygap))).divide(10000).updateMask(r01_ag_resto)
     crop_area = crop_gap.gt(0).multiply(ee.Image.pixelArea()).multiply(hfra.divide(hf_total)) \
-            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("b1")
     crop_mean = crop_gap.where(crop_gap.lt(0),0) \
-            .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
+            .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("b1")
     if crop_mean.getInfo() < 0:
         crop_mean = 0
     return ee.Number(crop_area).multiply(crop_mean)
@@ -245,7 +252,7 @@ wheat_inc = wheat_ton.multiply(200) # 200 $/ton
 i1_crop_value = barle_inc.add(groun_inc.add(maize_inc.add(rice0_inc.add(soybe_inc.add(sunfl_inc.add(wheat_inc))))))
 
 soc_ag_rest = ee.Number(soc.updateMask(r01_ag_resto) \
-        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1"))
+        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("b1"))
 if soc_ag_rest.getInfo() < 0:
     soc_ag_rest = ee.Number(0)
 
@@ -268,9 +275,9 @@ out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr
 def f_crop_inc_expansion(ypot, hfra):
     crop_gap = ypot.multiply(0.75).divide(10000).updateMask(r02_ag_expan)
     crop_area = crop_gap.gt(0).multiply(ee.Image.pixelArea()).multiply(hfra.divide(hf_total)) \
-            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("b1")
     crop_mean = crop_gap.where(crop_gap.lt(0), 0) \
-            .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1")
+            .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("b1")
     if crop_mean.getInfo() < 0:
         crop_mean = 0
     return ee.Number(crop_area).multiply(crop_mean)
@@ -298,7 +305,7 @@ wheat_inc = wheat_ton.multiply(200) # 200 $/ton
 i2_crop_value = barle_inc.add(groun_inc.add(maize_inc.add(rice0_inc.add(soybe_inc.add(sunfl_inc.add(wheat_inc))))))
 
 soc_ag_exp = ee.Number(soc.updateMask(r02_ag_expan) \
-        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=1e13).get("b1"))
+        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("b1"))
 if soc_ag_exp.getInfo() < 0:
     soc_ag_exp = ee.Number(0)
 
@@ -331,13 +338,16 @@ bgb = agb.expression('0.489 * BIO**(0.89)', {'BIO': agb})
 tco2 = agb.expression('(bgb + abg ) * 0.5 * 3.67 ', {'bgb': bgb,'abg': agb})
 
 # define potential forest C stock (in co2 eq) as the 75th percentile of current forest stands in the area (added buffer in case there is no forest)
-tco2_85pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([85]), geometry=aoi.buffer(10000), scale=scale, maxPixels=1e13).get("constant"))
+tco2_85pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([85]), 
+                                        geometry=aoi.buffer(10000), 
+                                        scale=scale, maxPixels=MAX_PIXELS, 
+                                        bestEffort=True).get("constant"))
 if tco2_85pc.getInfo() < 0:
     tco2_85pc = ee.Number(0)
 
 r03_fr_resto_co2_dif = tco2.subtract(ee.Number(tco2_85pc)).multiply(-1)
 r03_fr_resto_co2_dif_mean = ee.Number(r03_fr_resto_co2_dif.where(r03_fr_resto_co2_dif.lt(0), 0) \
-        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale,  maxPixels=1e13).get("constant"))
+        .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale,  maxPixels=MAX_PIXELS, bestEffort=True).get("constant"))
 if r03_fr_resto_co2_dif_mean.getInfo() < 0:
     r03_fr_resto_co2_dif_mean = ee.Number(0)
 
@@ -393,7 +403,7 @@ out['ecosystem_service_dominant'] = get_fc_properties(dom_serv_area, normalize=T
 eco_serv_index = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_total_real_services")
 
 # compute statistics for the region
-eco_s_index_mean = eco_serv_index.reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=10000, maxPixels=1e9)
+eco_s_index_mean = eco_serv_index.reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=10000, maxPixels=MAX_PIXELS, bestEffort=True)
 # mean ecosystem service relative index for the region
 out['ecosystem_service_value'] = eco_s_index_mean.getInfo()['b1']
 

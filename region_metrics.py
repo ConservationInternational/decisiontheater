@@ -15,6 +15,9 @@ from common import get_fc_properties, get_coords
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
 ee.Initialize(credentials)
+#ee.Initialize()
+
+MAX_PIXELS= 1e9
 
 aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 
@@ -25,7 +28,8 @@ out['area_hectares'] = aoi.area().divide(10000).getInfo()
 
 # s2_02: Number of people living inside the polygon in 2015
 pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
-population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=1000, maxPixels=1e9)
+population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, 
+                                  scale=1000, maxPixels=MAX_PIXELS, bestEffort=True)
 out['population'] = population.getInfo()['population-count']
 
 # s2_03: Main livelihoods
@@ -36,7 +40,7 @@ livImage = liv.filter(ee.Filter.neq('lztype_num', None)).reduceToImage(propertie
 fields = ["No Data", "Agro-Forestry", "Agro-Pastoral", "Arid", "Crops - Floodzone", "Crops - Irrigated", "Crops - Rainfed", "Fishery", "Forest-Based", "National Park", "Other", "Pastoral", "Urban"]
 # multiply pixel area by the area which experienced each of the five transitions --> output: area in ha
 livelihoodareas = livImage.eq([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) \
-        .rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum(), 30)
+        .rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum(), 250)
 out['livelihoods'] = get_fc_properties(livelihoodareas, normalize=True, scaling=100)
 # Handle the case of polygons outside of the area of coverage of the livelihood 
 # zones data
@@ -122,7 +126,8 @@ out['lc_transition_hectares'] = get_fc_properties(lc_transitions, normalize=Fals
 soc_pch_img = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_soc_globe_2001-2015_deg").select("soc_pch")
 
 # compute statistics for region
-soc_pch = soc_pch_img.reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=250, maxPixels=1e9)
+soc_pch = soc_pch_img.reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, 
+                                   scale=250, maxPixels=MAX_PIXELS, bestEffort=True)
 # Multiple by 100 to convert to a percentage
 out['soc_change_percent'] = soc_pch.getInfo()['soc_pch'] * 100
   
@@ -132,7 +137,9 @@ soc_an_img = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_soc
 # compute change in SOC between 2001 and 2015 converted to co2 eq
 soc_chg_an = (soc_an_img.select('y2015').subtract(soc_an_img.select('y2001'))).multiply(ee.Image.pixelArea()).divide(10000).multiply(3.67)
 # compute statistics for the region
-soc_chg_tons_co2e = soc_chg_an.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=250, maxPixels=1e9)
+soc_chg_tons_co2e = soc_chg_an.reduceRegion(reducer=ee.Reducer.sum(), 
+                                            geometry=aoi, scale=250, 
+                                            maxPixels=MAX_PIXELS, bestEffort=True)
 out['soc_change_tons_co2e'] = soc_chg_tons_co2e.getInfo()['y2015']
 
 ###########################################################
@@ -156,7 +163,7 @@ eco_serv_index = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_tot
 # compute statistics for the region
 eco_s_index_mean = eco_serv_index.reduceRegion(reducer=ee.Reducer.mean(),
                                                    geometry=aoi, scale=10000, 
-                                                   maxPixels=1e9)
+                                                   maxPixels=MAX_PIXELS, bestEffort=True)
 # mean ecosystem service relative index for the region
 out['ecosystem_service_value'] = eco_s_index_mean.getInfo()['b1']
 
