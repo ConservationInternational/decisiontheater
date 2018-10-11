@@ -10,7 +10,8 @@ import io
 
 import ee
 
-from common import get_fc_properties, get_coords, GEECall
+from common import get_fc_properties, get_coords, GEECall, get_area, get_pop, \
+    get_area_sdg, get_ecosystem_service_dominant, get_ecosystem_service_value
 
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
@@ -24,20 +25,8 @@ aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 out = {}
 threads = []
 
-def get_area(out):
-    # polygon area in hectares
-    out['area_hectares'] = aoi.area().divide(10000).getInfo()
-    return out
-threads.append(GEECall(get_area, out))
-
-def get_pop(out):
-    # s2_02: Number of people living inside the polygon in 2015
-    pop_cnt = ee.Image("CIESIN/GPWv4/unwpp-adjusted-population-count/2015")
-    population = pop_cnt.reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, 
-                                      scale=1000, maxPixels=MAX_PIXELS, bestEffort=True)
-    out['population'] = population.getInfo()['population-count']
-    return out
-threads.append(GEECall(get_pop, out))
+threads.append(GEECall(get_area, out, aoi))
+threads.append(GEECall(get_pop, out, aoi))
 
 def get_livelihoods(out):
     # s2_03: Main livelihoods
@@ -64,16 +53,9 @@ def get_livelihoods(out):
         # categories
         out['livelihoods'].pop('No Data')
         out['livelihoods'] = {key: 0. for key, value in out['livelihoods'].iteritems()}
-    return out
 threads.append(GEECall(get_livelihoods, out))
 
-
-def get_area_sdg(out):
-    # s3_01: SDG 15.3.1 degradation classes 
-    te_sdgi = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_sdg1531_gpg_globe_2001_2015_modis")
-    sdg_areas = te_sdgi.eq([-32768,-1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-    out['area_sdg'] = get_fc_properties(sdg_areas, normalize=True, scaling=100)
-threads.append(GEECall(get_area_sdg, out))
+threads.append(GEECall(get_area_sdg, out, aoi))
 
 def get_area_prod(out):
     # s3_02: Productivity degradation classes
@@ -177,35 +159,9 @@ def get_soc_change_tons_co2e(out):
     out['soc_change_tons_co2e'] = soc_chg_tons_co2e.getInfo()['y2015']
 threads.append(GEECall(get_soc_change_tons_co2e, out))
 
-###########################################################
-# Ecosystem services
+threads.append(GEECall(get_ecosystem_service_dominant, out, aoi))
 
-def get_ecosystem_service_dominant(out):
-    # dominant ecosystem service
-    dom_service = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_greatesttotalrealisedservice")
-
-    # define the names of the fields
-    es_fields = ["none","carbon", "nature-basedtourism", "culture-basedtourism", "water", "hazardmitigation", "commercialtimber", "domestictimber", "commercialfisheries",
-                  "artisanalfisheries", "fuelwood", "grazing", "non-woodforestproducts", "wildlifedis-services", "wildlifeservices", "environmentalquality"]
-
-    # multiply pixel area by the area which experienced each of the three transitions --> output: area in ha
-    dom_serv_area = dom_service.eq([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]).rename(es_fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
-
-    # table with areas of each of the dominant ecosystem services in the area
-    out['ecosystem_service_dominant'] = get_fc_properties(dom_serv_area, normalize=True, scaling=100)
-threads.append(GEECall(get_ecosystem_service_dominant, out))
-
-def get_ecosystem_service_value(out):
-    # Relative realised service index (0-1)
-    eco_serv_index = ee.Image("users/geflanddegradation/toolbox_datasets/ecoserv_total_real_services")
-
-    # compute statistics for the region
-    eco_s_index_mean = eco_serv_index.reduceRegion(reducer=ee.Reducer.mean(),
-                                                       geometry=aoi, scale=10000, 
-                                                       maxPixels=MAX_PIXELS, bestEffort=True)
-    # mean ecosystem service relative index for the region
-    out['ecosystem_service_value'] = eco_s_index_mean.getInfo()['b1']
-threads.append(GEECall(get_ecosystem_service_value, out))
+threads.append(GEECall(get_ecosystem_service_value, out, aoi))
 
 for t in threads:
     t.join()

@@ -10,7 +10,8 @@ import io
 
 import ee
 
-from common import get_fc_properties, get_fc_properties_text, get_coords
+from common import get_fc_properties, get_fc_properties_text, get_coords, \
+    GEECall
 
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
@@ -20,8 +21,8 @@ aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 
 out = {}
 
-###########################################################
-# s4_03: degradation analysis within species ranges
+###############################################################################
+# Setup
 
 # load productivity degradation
 te_prod = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lp7cl_globe_2001_2015_modis") \
@@ -48,12 +49,29 @@ mammals_clp = mammals_rng_aoi.map(f_clip_ranges)
 # multiply pixel area by the area which experienced each of the three transitions --> output: area in ha
 mammals_deg_aoi = te_prod.eq([-32768,-1,0,1]).rename(fields).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(mammals_clp, ee.Reducer.sum())
 
+###############################################################################
+# Run the two IUCN queries in parallel
+threads = []
 
-# degradation stats per species within aoi
-iucn_deg_aoi = get_fc_properties_text(mammals_deg_aoi)
-iucn_deg_all = get_fc_properties_text(mammals_deg_all)
+# degradation stats per species in range for degradation within aoi
+iucn_deg_aoi = []
+def get_iucn_deg_aoi(iucn_deg_aoi):
+    iucn_deg_aoi.extend(get_fc_properties_text(mammals_deg_aoi))
+threads.append(GEECall(get_iucn_deg_aoi, iucn_deg_aoi))
 
-# Ranges stats ontains the attributes from the ranges + the three fields with 
+# degradation stats per species in range for degradation globally
+iucn_deg_all = []
+def get_iucn_deg_all(iucn_deg_all):
+    iucn_deg_all.extend(get_fc_properties_text(mammals_deg_all))
+threads.append(GEECall(get_iucn_deg_all, iucn_deg_all))
+
+for t in threads:
+    t.join()
+
+###############################################################################
+# Clean up the returned IUCN results
+
+# Ranges stats contains the attributes from the ranges + the three fields with 
 # area in has of improved, decline or stable productivity. Clean up the 
 # degradation statistics from GEE so they are percentages of the total area.
 def clean_iucn_degradation(d):

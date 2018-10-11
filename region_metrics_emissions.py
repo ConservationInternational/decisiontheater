@@ -10,7 +10,7 @@ import io
 
 import ee
 
-from common import get_fc_properties, get_coords
+from common import get_fc_properties, get_coords, GEECall
 
 service_account = 'gef-ldmp-server@gef-ld-toolbox.iam.gserviceaccount.com'
 credentials = ee.ServiceAccountCredentials(service_account, 'dt_key.json')
@@ -22,6 +22,7 @@ aoi = ee.Geometry.MultiPolygon(get_coords(json.loads(sys.argv[1])))
 area_hectares = aoi.area().divide(10000).getInfo()
 
 out = {}
+threads = []
 
 ###############################################################################
 # Carbon emissions calculations
@@ -106,18 +107,23 @@ output = fc_stack.addBands(fl_stack).addBands(cb_stack).addBands(ce_stack)
 # compute pixel areas in hectareas
 areas = output.multiply(ee.Image.pixelArea().divide(10000))
 
-# Get annual emissions and sum them across all years
-emissions = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30),
-        normalize=False, filter_regex='carbon_emissions_tons_co2e_[0-9]*')
-out['carbon_emissions_tons_co2e'] = sum(emissions.values())
+def get_carbon_emissions_tons_co2e(out):
+    # Get annual emissions and sum them across all years
+    emissions = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30),
+            normalize=False, filter_regex='carbon_emissions_tons_co2e_[0-9]*')
+    out['carbon_emissions_tons_co2e'] = sum(emissions.values())
+threads.append(GEECall(get_carbon_emissions_tons_co2e, out))
 
-forest_areas = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30),
-        normalize=False, filter_regex='forest_cover_[0-9]*')
+def get_forest_areas(out):
+    forest_areas = get_fc_properties(areas.reduceRegions(collection=aoi, reducer=ee.Reducer.sum(), scale=30),
+            normalize=False, filter_regex='forest_cover_[0-9]*')
+    out['forest_area_hectares_2001'] = forest_areas['forest_cover_2001']
+    out['forest_area_hectares_2015'] = forest_areas['forest_cover_2015']
+    out['forest_area_percent_2001'] = forest_areas['forest_cover_2001'] / area_hectares * 100
+    out['forest_area_percents_2015'] = forest_areas['forest_cover_2015'] / area_hectares * 100
+threads.append(GEECall(get_forest_areas, out))
 
-out['forest_area_hectares_2001'] = forest_areas['forest_cover_2001']
-out['forest_area_hectares_2015'] = forest_areas['forest_cover_2015']
-out['forest_area_percent_2001'] = forest_areas['forest_cover_2001'] / area_hectares * 100
-out['forest_area_percents_2015'] = forest_areas['forest_cover_2015'] / area_hectares * 100
-
+for t in threads:
+    t.join()
 # Return all output as json on stdout
 sys.stdout.write(json.dumps(out, ensure_ascii=False, indent=4, sort_keys=True))
