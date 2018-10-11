@@ -67,7 +67,7 @@ threads.append(GEECall(get_area_prod, out))
 def get_area_lc(out):
     # s3_03: Land cover degradation classes
     te_land = ee.Image("users/geflanddegradation/global_ld_analysis/r20180821_lc_traj_globe_2001-2001_to_2015")
-    lc_areas = te_land.select("lc_dg").eq([-1,0,1]).rename(["degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
+    lc_areas = te_land.select("lc_dg").eq([-32768, -1,0,1]).rename(["nodata", "degraded", "stable", "improved"]).multiply(ee.Image.pixelArea().divide(10000)).reduceRegions(aoi, ee.Reducer.sum())
     out['area_lc'] = get_fc_properties(lc_areas, normalize=True, scaling=100)
 threads.append(GEECall(get_area_lc, out))
 
