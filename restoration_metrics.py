@@ -170,45 +170,19 @@ soc = ee.Image("users/geflanddegradation/toolbox_datasets/soc_sgrid_30cm_unccd_2
 # define areas for each of the 3 potential restoration activities
 ###############################################################################
 
-# for agriculture restoration: ag land cover, prod degradation, no kbas, no pas
-ag_intens_r = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7],
-                           [     0, 1, 1, 0, 0, 0, 0, 0]) \
-        .eq(1).And(landc.eq(4)).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
-ag_intens_area = ag_intens_r.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, 
-                      maxPixels=MAX_PIXELS, bestEffort=True) \
-        .get("remapped")
-out['interventions']['agricultural intensification']['area_hectares'] = ag_intens_area.getInfo()
-out['interventions']['agricultural intensification']['area_habitat_hectares'] = 0
+def get_ag_intens_cba(out):
+    # for agriculture restoration: ag land cover, prod degradation, no kbas, no 
+    # pas
+    ag_intens_r = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7],
+                               [     0, 1, 1, 0, 0, 0, 0, 0]) \
+            .eq(1).And(landc.eq(4)).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
+    ag_intens_area = ag_intens_r.multiply(ee.Image.pixelArea().divide(10000)) \
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, 
+                          maxPixels=MAX_PIXELS, bestEffort=True) \
+            .get("remapped")
+    out['interventions']['agricultural intensification']['area_hectares'] = ag_intens_area.getInfo()
+    out['interventions']['agricultural intensification']['area_habitat_hectares'] = 0
 
-# agriculture expansion: convert shrub, grass and sparce vegetation areas to 
-# ag, no kbas, no pas
-ag_expan_r = landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-                           [0, 0, 1, 1, 0, 0, 1, 0, 0, 0,  0]) \
-        .eq(1).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
-ag_expan_area = ag_expan_r.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale,
-                      maxPixels=MAX_PIXELS, bestEffort=True) \
-        .get("remapped")
-out['interventions']['agricultural expansion']['area_hectares'] = ag_expan_area.getInfo()
-out['interventions']['agricultural expansion']['area_habitat_hectares'] = 0
-
-# for forest re-establishment: shrub, grass, sparce or other land cover in areas of potential forest (regardless of kbas or pas)
-for_reest_r = pot_forest.eq(1).And(landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0])).eq(1)
-for_reest_area = for_reest_r.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("remapped")
-out['interventions']['forest re-establishment']['area_hectares'] = for_reest_area.getInfo()
-#TODO: Fix so habitat is negative
-out['interventions']['forest re-establishment']['area_habitat_hectares'] = for_reest_area.getInfo()
-
-# for forest restoration: current degraded forests  (regardless of kbas or pas)
-for_restor_r = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7], [0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(1))
-for_restor_area = for_restor_r.multiply(ee.Image.pixelArea().divide(10000)) \
-        .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("remapped")
-out['interventions']['forest restoration']['area_hectares'] = for_restor_area.getInfo()
-out['interventions']['forest restoration']['area_habitat_hectares'] = for_restor_area.getInfo()
-
-def get_ag_intens(out):
     def f_crop_inc_intensification(ygap, ypot, hfra):
         crop_gap = (ypot.multiply(0.75).subtract(ypot.subtract(ygap))).divide(10000).updateMask(ag_intens_r)
         crop_area = crop_gap.gt(0).multiply(ee.Image.pixelArea()).multiply(hfra.divide(hf_total)) \
@@ -255,9 +229,21 @@ def get_ag_intens(out):
     out['interventions']['agricultural intensification']['dollars_benefits_total'] = ag_intens_value.getInfo()
     out['interventions']['agricultural intensification']['dollars_cost_total'] = ag_intens_cost.getInfo()
     out['interventions']['agricultural intensification']['dollars_net_per_psn_per_yr'] = ag_intens_benef.getInfo()
-threads.append(GEECall(get_ag_intens, out))
+threads.append(GEECall(get_ag_intens_cba, out))
 
-def get_ag_expan(out):
+def get_ag_expan_cba(out):
+    # agriculture expansion: convert shrub, grass and sparce vegetation areas 
+    # to ag, no kbas, no pas
+    ag_expan_r = landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                               [0, 0, 1, 1, 0, 0, 1, 0, 0, 0,  0]) \
+            .eq(1).where(kba_r.eq(1), 0).where(pas_r.eq(1), 0)
+    ag_expan_area = ag_expan_r.multiply(ee.Image.pixelArea().divide(10000)) \
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale,
+                          maxPixels=MAX_PIXELS, bestEffort=True) \
+            .get("remapped")
+    out['interventions']['agricultural expansion']['area_hectares'] = ag_expan_area.getInfo()
+    out['interventions']['agricultural expansion']['area_habitat_hectares'] = 0
+
     def f_crop_inc_expansion(ypot, hfra):
         crop_gap = ypot.multiply(0.75).divide(10000).updateMask(ag_expan_r)
         crop_area = crop_gap.gt(0).multiply(ee.Image.pixelArea()).multiply(hfra.divide(hf_total)) \
@@ -307,7 +293,7 @@ def get_ag_expan(out):
     out['interventions']['agricultural expansion']['dollars_net_per_psn_per_yr'] = ag_expan_value.subtract(ag_expan_cost).divide(population).getInfo()
     out['interventions']['agricultural expansion']['dollars_cost_total'] = ag_expan_cost.getInfo()
     out['interventions']['agricultural expansion']['dollars_benefits_total'] = ag_expan_value.getInfo()
-threads.append(GEECall(get_ag_expan, out))
+threads.append(GEECall(get_ag_expan_cba, out))
 
 ###############################################################################
 # forest restoration/re-establishment cost calculations
@@ -330,7 +316,15 @@ tco2_85pc = ee.Number(tco2.reduceRegion(reducer=ee.Reducer.percentile([85]),
 if tco2_85pc.getInfo() < 0:
     tco2_85pc = ee.Number(0)
 
-def get_for_restor(out):
+def get_for_restor_cba(out):
+    # for forest restoration: current degraded forests  (regardless of kbas or 
+    # pas)
+    for_restor_r = lp7cl.remap([-32768, 1, 2, 3, 4, 5, 6, 7], [0, 1, 1, 0, 0, 0, 0, 0]).eq(1).And(landc.eq(1))
+    for_restor_area = for_restor_r.multiply(ee.Image.pixelArea().divide(10000)) \
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("remapped")
+    out['interventions']['forest restoration']['area_hectares'] = for_restor_area.getInfo()
+    out['interventions']['forest restoration']['area_habitat_hectares'] = for_restor_area.getInfo()
+
     for_restor_co2_dif = tco2.subtract(ee.Number(tco2_85pc)).multiply(-1)
     for_restor_co2_dif_mean = ee.Number(for_restor_co2_dif.where(for_restor_co2_dif.lt(0), 0) \
             .reduceRegion(reducer=ee.Reducer.mean(), geometry=aoi, scale=scale,  maxPixels=MAX_PIXELS, bestEffort=True).get("constant"))
@@ -348,9 +342,18 @@ def get_for_restor(out):
     out['interventions']['forest restoration']['dollars_net_per_psn_per_yr'] = for_restor_net_benef.getInfo()
     out['interventions']['forest restoration']['dollars_cost_total'] = for_restor_cost.getInfo()
     out['interventions']['forest restoration']['dollars_benefits_total'] = for_restor_value.getInfo()
-threads.append(GEECall(get_for_restor, out))
+threads.append(GEECall(get_for_restor_cba, out))
 
-def get_for_reest(out):
+def get_for_reest_cba(out):
+    # for forest re-establishment: shrub, grass, sparce or other land cover in 
+    # areas of potential forest (regardless of kbas or pas)
+    for_reest_r = pot_forest.eq(1).And(landc.remap([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0])).eq(1)
+    for_reest_area = for_reest_r.multiply(ee.Image.pixelArea().divide(10000)) \
+            .reduceRegion(reducer=ee.Reducer.sum(), geometry=aoi, scale=scale, maxPixels=MAX_PIXELS, bestEffort=True).get("remapped")
+    out['interventions']['forest re-establishment']['area_hectares'] = for_reest_area.getInfo()
+    #TODO: Fix so habitat can be negative? Due to grassland loss?
+    out['interventions']['forest re-establishment']['area_habitat_hectares'] = for_reest_area.getInfo()
+
     # Cost of re-establishment over 30 years 900$/ha for planting 400$/ha 
     # natural regeneration over a 30 yr period
     # Cost of forest regeneration in forest areas 1/2 of in ag land 200 $/ha  over a 30 yr period
@@ -363,7 +366,7 @@ def get_for_reest(out):
     out['interventions']['forest re-establishment']['dollars_net_per_psn_per_yr'] = for_reest_benef.getInfo()
     out['interventions']['forest re-establishment']['dollars_cost_total'] = for_reest_cost.getInfo()
     out['interventions']['forest re-establishment']['dollars_benefits_total'] = for_reest_value.getInfo()
-threads.append(GEECall(get_for_reest, out))
+threads.append(GEECall(get_for_reest_cba, out))
 
 threads.append(GEECall(get_ecosystem_service_dominant, out, aoi))
 
