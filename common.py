@@ -1,4 +1,5 @@
 import re
+import threading
 
 # Function to pull areas that are saved as properties within a feature class,
 # convert them to percentages of the total area, and return as a dictionary. Sums
@@ -57,3 +58,17 @@ def get_coords(geojson):
         return geojson.get('geometry').get('coordinates')
     else:
         return geojson.get('coordinates')
+
+class GEEThread(threading.Thread):
+    def __init__(self, target, *args):
+        self._target = target
+        self._args = args
+        threading.Thread.__init__(self)
+
+    def run(self):
+        self._target(*self._args)
+
+def GEECall(target, *args):
+    thread = GEEThread(target, *args)
+    thread.start()
+    return thread
